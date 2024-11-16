@@ -25,7 +25,9 @@
 #; (define (F exp)
      (match exp
        [(num n) ... n ...]
-       [(plus left right) ... (F left) ... (F right) ...]))
+       [(plus left right) ... (F left) ... (F right) ...]
+      )
+    )
 
 
 ;; calc : Exp -> Number
@@ -33,7 +35,9 @@
 (define (calc exp)
   (match exp
     [(num n) n]
-    [(plus left right) (+ (calc left) (calc right))]))
+    [(plus left right) (+ (calc left) (calc right))]
+  )
+)
 
 (module+ test
   (check-equal? (calc (num 0)) 0)
