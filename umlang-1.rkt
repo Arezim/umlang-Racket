@@ -51,17 +51,44 @@
   (match exp
     [(num n) (v-num n)]
     [(bool b) (v-bool b)]
-    [(plus left right) (v-num (+ (calc left) (calc right)))]    ;; !!!contract violation - (v-num ...) expected a number, and got another v-num, or - what's even worse - a v-bool! 
-                                                                ;; Thtat's why we need a different way to add numerals
-    [(conditional test if-true if-false) (if (calc test) (calc if-true) (calc if-false))] 
+    [(plus left right) (primitive-add (calc left) (calc right))]
+    [(conditional test if-true if-false) (if (truthy? (calc test)) (calc if-true) (calc if-false))] 
   )
 )
 
+;; truthy?: Value -> Boolean
+;; PARTIAL: error is signalled unless 'v' is a 'v-bool'
+;; Answer #t if 'v' denotes a "true" value, and #f if 'v' denotes a "false" value
+(define (truthy? v)
+  (match v
+    [(v-bool b) b]
+    [(v-num _) (error 'truthy? "Expected boolean: ~v" v)]
+  )
+)
+
+;; primitive-add: Value Value -> Value
+;; PARTIAL: error is signalled on non-numeric inputs
+;; Add 'a' and 'b' together
+(define (primitive-add a b)
+  (v-num (+ (ensure-number a) (ensure-number b)))  
+)
+
+;; ensure number: Value -> Number
+;; PARTIAL: error is signalled on non-'v-num'
+;; Extract numeric value from general value
+(define (ensure-number x)
+  (match x
+    [(v-num n) n]
+    [(v-bool _) (error 'ensure-number "Expected number: ~v" x)]
+  )
+)
+
+
 (module+ test
-  (check-equal? (calc (num 0)) 0)
-  (check-equal? (calc (num -5.6)) -5.6)
-  (check-equal? (calc (plus (num 3) (num 4))) 7)
-  (check-equal? (calc (plus (num 1) (plus (num 2) (num 3)))) 6)
+  (check-equal? (calc (num 0)) (v-num 0))
+  (check-equal? (calc (num -5.6)) (v-num -5.6))
+  (check-equal? (calc (plus (num 3) (num 4))) (v-num 7))
+  (check-equal? (calc (plus (num 1) (plus (num 2) (num 3)))) (v-num 6))
 )
 
 ;; parse-exp : S-Expression -> Exp
@@ -93,4 +120,25 @@
   (check-equal? (parse-exp `{+ 3 4}) (plus (num 3) (num 4)))
   (check-equal? (parse-exp `{+ 1 {+ 2 3}}) (plus (num 1) (plus (num 2) (num 3))))
   (check-exn #px"Parse error" (lambda () (parse-exp `{1 + 2})))
+)
+
+
+;; run: S-Expression -> Value
+;; Parses and then calculates.
+;; Partil: Parsing may fail; interpretation may fail.
+(define (run s)
+  (calc (parse-exp s))
+)
+
+(module+ test
+  (check-equal? (run 0) (v-num 0))
+  (check-equal? (run #t) (v-bool #t))
+  (check-equal? (run -5.6) (v-num -5.6))
+  (check-equal? (run `{+ 3 4}) (v-num 7))
+  (check-equal? (run `{+ 1 {+ 2 3}}) (v-num 6))
+  (check-equal? (run `{if #t 1 2}) (v-num 1))
+  (check-equal? (run `{if #f 1 2}) (v-num 2))
+  ;; Let's try some negative tests: valid S-expressions, not parseable into `Exp`s.
+  (check-exn #px"Parse error" (lambda () (run `{1 + 2})))
+  (check-exn #px"Parse error" (lambda () (run `{if #t then 1 else 2})))
 )
