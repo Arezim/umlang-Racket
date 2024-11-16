@@ -48,11 +48,11 @@
 ;; It is one of:
 ;; - a (v-num Number), a numeric result
 ;; - a (v-bool Boolean), a boolean result
-;; - a (v-fn Symbol Exp), a function value
+;; - a (v-fn Symbol Exp Env), a function value
 
 (struct v-num (n) #:transparent)
 (struct v-bool (b) #:transparent)
-(struct v-fn (formal body) #:transparent)
+(struct v-fn (formal body env) #:transparent)
 
 ;; An Env denotes an *Environment*, mapping names (Symbols) to Values.
 ;; It is a ListOF<pair Symbol Value>
@@ -89,11 +89,11 @@
     [(bool b) (v-bool b)]
     [(plus left right) (primitive-add (calc left env) (calc right env))]
     [(conditional test if-true if-false) (if (truthy? (calc test env)) (calc if-true env) (calc if-false env))]
-    [(fn formal body) (v-fn formal body)]
+    [(fn formal body) (v-fn formal body env)]
     [(call f arg) (let ([function-value (calc f env)]
                         [argument-value (calc arg env)])
                     (match function-value
-                      [(v-fn formal body) (calc body (extended-env formal argument-value env))]
+                      [(v-fn formal body fn-env) (calc body (extended-env formal argument-value fn-env))]
                       [_ (error 'calc "Expected function: ~v" function-value)]
                     )
                   )
@@ -193,7 +193,7 @@
   (check-equal? (run `{if #t 1 2}) (v-num 1))
   (check-equal? (run `{if #f 1 2}) (v-num 2))
   (check-equal? (run `{let1 {x 123} x}) (v-num 123))
-  (check-equal? (run `{fn {x} {+ x 1}}) (v-fn 'x (plus (ref 'x) (num 1))))
+  (check-equal? (run `{fn {x} {+ x 1}}) (v-fn 'x (plus (ref 'x) (num 1)) empty-env))
   (check-equal? (run `{{fn {x} {+ x 1}} 123}) (v-num 124))
 
   ;; Let's try some negative tests: valid S-expressions, not parseable into `Exp`s.
