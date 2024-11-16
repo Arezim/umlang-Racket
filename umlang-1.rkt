@@ -43,4 +43,25 @@
   (check-equal? (calc (num 0)) 0)
   (check-equal? (calc (num -5.6)) -5.6)
   (check-equal? (calc (plus (num 3) (num 4))) 7)
-  (check-equal? (calc (plus (num 1) (plus (num 2) (num 3)))) 6))
+  (check-equal? (calc (plus (num 1) (plus (num 2) (num 3)))) 6)
+)
+
+;; parse-exp : S-Expression -> Exp
+;; Parse the concrete S-Expression to an instance of Exp, if possible.
+;; PARTIAL FUNCTION. Will signal an error on invalid inputs
+
+(define (parse-exp s)
+  (match s
+    [(list '+ L R) (plus (parse-exp L) (parse-exp R))]
+    [(? number? N) (num N)]
+    [_ (error 'parse-exp "Parse error: ~v" s)]
+  )
+)
+
+(module+ test
+  (check-equal? (parse-exp 0) (num 0))
+  (check-equal? (parse-exp -5.6) (num -5.6))
+  (check-equal? (parse-exp `{+ 3 4}) (plus (num 3) (num 4)))
+  (check-equal? (parse-exp `{+ 1 {+ 2 3}}) (plus (num 1) (plus (num 2) (num 3))))
+  (check-exn #px"Parse error" (lambda () (parse-exp `{1 + 2})))
+)
