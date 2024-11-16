@@ -12,6 +12,8 @@
 ;; - a (bool Boolean), stands for a literal boolean
 ;; - a (plus Exp Exp), denotes addition of the results of two expressions
 ;; - a (conditional Exp Exp Exp), an if/then/else expression
+;; - a (fn Symbol Exp), makes a one-argument function
+;; - a (call Exp Exp), makes a call to 'f' with argument 'arg'
 
 (struct ref (name) #:transparent)
 (struct let1 (name init body) #:transparent)
@@ -19,6 +21,8 @@
 (struct bool (b) #:transparent)
 (struct plus (l r) #:transparent)
 (struct conditional (test if-true if-false) #:transparent)
+(struct fn (formal-arg body) #:transparent)
+(struct call (f arg) #:transparent)
 
 
 ;; EXAMPLES
@@ -44,10 +48,11 @@
 ;; It is one of:
 ;; - a (v-num Number), a numeric result
 ;; - a (v-bool Boolean), a boolean result
+;; - a (v-fn Symbol Exp), a function value
 
 (struct v-num (n) #:transparent)
 (struct v-bool (b) #:transparent)
-
+(struct v-fn (formal body) #:transparent)
 
 ;; An Env denotes an *Environment*, mapping names (Symbols) to Values.
 ;; It is a ListOF<pair Symbol Value>
@@ -83,7 +88,16 @@
     [(num n) (v-num n)]
     [(bool b) (v-bool b)]
     [(plus left right) (primitive-add (calc left env) (calc right env))]
-    [(conditional test if-true if-false) (if (truthy? (calc test env)) (calc if-true env) (calc if-false env))] 
+    [(conditional test if-true if-false) (if (truthy? (calc test env)) (calc if-true env) (calc if-false env))]
+    [(fn formal body) (v-fn formal body)]
+    [(call f arg) (let ([function-value (calc f env)]
+                        [argument-value (calc arg env)])
+                    (match function-value
+                      [(v-fn formal body) (calc body (extended-env formal argument-value env))]
+                      [_ (error 'calc "Expected function: ~v" function-value)]
+                    )
+                  )
+    ]
   )
 )
 
@@ -126,6 +140,8 @@
     [(list '+ L R) (plus (parse-exp L) (parse-exp R))]
     [(list 'if Test If-True If-False) (conditional (parse-exp Test) (parse-exp If-True) (parse-exp If-False))]
     [(list 'let1 (list Name Init) Body) (let1 Name (parse-exp Init) (parse-exp Body))]
+    [(list 'fn (list FORMAL) BODY) (fn FORMAL (parse-exp BODY))]
+    [(list F ARG) (call (parse-exp F) (parse-exp ARG))]
     [(? boolean? B) (bool B)]                                   
     [(? number? N) (num N)]
     [(? symbol? S) (ref S)]
@@ -142,11 +158,15 @@
   (check-equal? (parse-exp `{+ 3 4}) (plus (num 3) (num 4)))
   (check-equal? (parse-exp `{+ 1 {+ 2 3}}) (plus (num 1) (plus (num 2) (num 3))))
   (check-equal? (parse-exp `{if #t 1 2}) (conditional (bool #t) (num 1) (num 2)))
-  (check-equal? (parse-exp `{let1 {x 123} x}) (let1 'x (num 123) (ref 'x))))
+  (check-equal? (parse-exp `{let1 {x 123} x}) (let1 'x (num 123) (ref 'x)))
+  (check-equal? (parse-exp `{fn {x} {+ x 1}}) (fn 'x (plus (ref 'x) (num 1))))
+  (check-equal? (parse-exp `{1 2}) (call (num 1) (num 2))))
 
 
 ;; Parser S-expression syntax examples:
 
+;; {fn {x} {+ x 1}} -> (fn 'x (plus (ref 'x) (num 1)))
+;; {f 123} -> (call (ref 'f) (num 123))
 ;; x -> (ref 'x)
 ;; {let1 {x 123} x} -> (let1 'x (num 123) (ref 'x))
 ;; `{+ 1 2} -> (plus 1 2)
@@ -163,6 +183,7 @@
   (calc (parse-exp s) empty-env)
 )
 
+
 (module+ test
   (check-equal? (run 0) (v-num 0))
   (check-equal? (run #t) (v-bool #t))
@@ -172,7 +193,11 @@
   (check-equal? (run `{if #t 1 2}) (v-num 1))
   (check-equal? (run `{if #f 1 2}) (v-num 2))
   (check-equal? (run `{let1 {x 123} x}) (v-num 123))
+  (check-equal? (run `{fn {x} {+ x 1}}) (v-fn 'x (plus (ref 'x) (num 1))))
+  (check-equal? (run `{{fn {x} {+ x 1}} 123}) (v-num 124))
 
   ;; Let's try some negative tests: valid S-expressions, not parseable into `Exp`s.
   (check-exn #px"Parse error" (lambda () (run `{1 + 2})))
-  (check-exn #px"Parse error" (lambda () (run `{if #t then 1 else 2}))))
+  (check-exn #px"Parse error" (lambda () (run `{if #t then 1 else 2})))
+  (check-exn #px"Parse error" (lambda () (run `{let1 {x 123 234} x})))
+  (check-exn #px"Parse error" (lambda () (run `{fn {x y} x}))))
